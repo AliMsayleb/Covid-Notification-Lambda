@@ -1,8 +1,8 @@
 # Covid Daily Notification Email via AWS Lambda
 
-This is the aws lambda code for sending a daily email with the covid updates
+This is the aws lambda code for sending a daily email with the covid updates in a certain country
 It is made for lambda with runtime Python 3.8 although it probably supports other versions of python
-You can setup a recipient email and a certain time to receive daily updates to this email regarding the new covid number of confirmed cases.
+You can setup a recipient email and a certain time to receive daily updates to this email regarding the new covid number of confirmed cases in a certain country.
 
 ## AWS Technologies Used
  - Lambda function (runtime of python 3.8)
