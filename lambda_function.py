@@ -11,7 +11,7 @@ client = boto3.client('ses',region_name=os.environ['AWS_SES_REGION'])
 CHARSET = "UTF-8"
 
 def lambda_handler(event, context):
-    response = getCovidNewNumberOfCases()
+    response = get_covid_new_cases()
     response_object = json.loads(response.decode('utf-8'))
     new_cases = (response_object[1]['Cases'] - response_object[0]['Cases'])
     date_yesterday = (datetime.today() - timedelta(days = 1)).strftime("%A %d-%B-%Y")
@@ -50,13 +50,13 @@ def lambda_handler(event, context):
         print("Email sent! Message ID:"),
         print(response['MessageId'])
         
-def getCovidNewNumberOfCases():
+def get_covid_new_cases():
     http = urllib3.PoolManager()
-    response = http.request('GET', buildCovidResourceUrl())
+    response = http.request('GET', build_covid_resource_url())
     
     return response.data
     
-def buildCovidResourceUrl():
+def build_covid_resource_url():
     today = datetime.today()
     two_days_ago = today - timedelta(days = 2)
     one_day_ago = today - timedelta(days = 1)
