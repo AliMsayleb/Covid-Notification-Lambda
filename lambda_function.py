@@ -6,25 +6,29 @@ from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
 
 SENDER = os.environ['SENDER_NAME'] + "<" + os.environ['SENDER_EMAIL'] +">"
-RECIPIENT = os.environ['RECEPIENT_EMAIL']
-client = boto3.client('ses',region_name=os.environ['AWS_SES_REGION'])
+RECIPIENTS = json.loads(os.environ['RECEPIENT_EMAILS'])
+ses_client = boto3.client('ses')
+sqs_client = boto3.client('sqs')
 CHARSET = "UTF-8"
+RETRIES_LIMIT = 3
+DELAY_TIME = 900
 
 def lambda_handler(event, context):
-    response = get_covid_new_cases()
-    response_object = json.loads(response.decode('utf-8'))
-    new_cases = (response_object[1]['Cases'] - response_object[0]['Cases'])
+    try:
+        new_cases = get_covid_new_cases()
+    except:
+        retry_later(event)
+        return
+
     date_yesterday = (datetime.today() - timedelta(days = 1)).strftime("%A %d-%B-%Y")
     SUBJECT = "Covid cases update: " + date_yesterday
     BODY_TEXT = str(new_cases) + " confirmed new covid cases on " + date_yesterday + '.'
     BODY_HTML = "<h2>" + str(new_cases) + " confirmed new covid cases on " + date_yesterday + '.</h2>'
     
     try:
-        response = client.send_email(
+        response = ses_client.send_email(
             Destination={
-                'ToAddresses': [
-                    RECIPIENT,
-                ],
+                'ToAddresses': RECIPIENTS,
             },
             Message={
                 'Body': {
@@ -52,9 +56,13 @@ def lambda_handler(event, context):
         
 def get_covid_new_cases():
     http = urllib3.PoolManager()
-    response = http.request('GET', build_covid_resource_url())
-    
-    return response.data
+    response = http.request('GET', build_covid_resource_url()).data
+    response_object = json.loads(response.decode('utf-8'))
+    if len(response_object) != 2 or response_object[1]['Cases'] - response_object[0]['Cases'] < 0: # Corrupted data from the resource API
+        print(response_object)
+        raise "Incorrect response" # Raising exception to retry later
+        
+    return response_object[1]['Cases'] - response_object[0]['Cases']
     
 def build_covid_resource_url():
     today = datetime.today()
@@ -79,3 +87,14 @@ def append_zero_if_needed(num):
         return '0' + str(num)
         
     return str(num)
+    
+def retry_later(event):
+    try: # get the number of retries from the sqs queue
+        num = int(event['Records'][0]['body'])
+        num = num + 1
+    except: # Not triggered by SQS (first time will be triggered by cloudwatch)
+        num = 1
+    if num >= RETRIES_LIMIT:
+        print ("Retries limit number reached")
+        return
+    resp = sqs_client.send_message(QueueUrl=os.environ['RETRY_QUEUE_URL'], MessageBody=str(num), DelaySeconds=DELAY_TIME)
